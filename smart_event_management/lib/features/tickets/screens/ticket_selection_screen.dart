@@ -10,10 +10,24 @@ import '../providers/ticket_provider.dart';
 import 'payment_screen.dart';
 
 /// Screen for selecting ticket type
-class TicketSelectionScreen extends StatelessWidget {
+class TicketSelectionScreen extends StatefulWidget {
   final String eventId;
 
   const TicketSelectionScreen({super.key, required this.eventId});
+
+  @override
+  State<TicketSelectionScreen> createState() => _TicketSelectionScreenState();
+}
+
+class _TicketSelectionScreenState extends State<TicketSelectionScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch fresh prices from DB
+    Future.microtask(() => 
+      context.read<TicketProvider>().fetchTicketConfigs(widget.eventId)
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,11 +36,13 @@ class TicketSelectionScreen extends StatelessWidget {
     final authProvider = context.watch<AuthProvider>();
     final registrationProvider = context.watch<RegistrationProvider>();
 
-    final event = eventProvider.getEventById(eventId);
+    final event = eventProvider.getEventById(widget.eventId);
     final user = authProvider.currentUser;
-    final ticketPrices = ticketProvider.getTicketPrices(eventId);
+    // Now this will return data once fetchTicketConfigs completes
+    final ticketPrices = ticketProvider.getTicketPrices(widget.eventId);
+    
     final existingTicket = user != null
-        ? ticketProvider.getUserTicketForEvent(user.id, eventId)
+        ? ticketProvider.getUserTicketForEvent(user.id, widget.eventId)
         : null;
 
     if (event == null || user == null) {
@@ -35,7 +51,7 @@ class TicketSelectionScreen extends StatelessWidget {
         body: const EmptyState(
           icon: Icons.error,
           title: 'Error',
-          subtitle: 'Event not found',
+          subtitle: 'Event not found or user not logged in',
         ),
       );
     }
@@ -109,9 +125,9 @@ class TicketSelectionScreen extends StatelessWidget {
                   ticketPrice: price,
                   onSelect: () async {
                     // First register if not registered
-                    if (!registrationProvider.isUserRegistered(user.id, eventId)) {
+                    if (!registrationProvider.isUserRegistered(user.id, widget.eventId)) {
                       await registrationProvider.registerForEvent(
-                        eventId: eventId,
+                        eventId: widget.eventId,
                         userId: user.id,
                         userName: user.name,
                         userEmail: user.email,
@@ -121,7 +137,7 @@ class TicketSelectionScreen extends StatelessWidget {
                     // If free ticket, purchase directly
                     if (price.type == TicketType.free) {
                       final ticket = await ticketProvider.purchaseTicket(
-                        eventId: eventId,
+                        eventId: widget.eventId,
                         eventTitle: event.title,
                         userId: user.id,
                         userName: user.name,
@@ -143,7 +159,7 @@ class TicketSelectionScreen extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => PaymentScreen(
-                            eventId: eventId,
+                            eventId: widget.eventId,
                             eventTitle: event.title,
                             ticketType: price.type,
                             price: price.price,

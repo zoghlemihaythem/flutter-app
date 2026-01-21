@@ -3,83 +3,56 @@ import 'package:uuid/uuid.dart';
 import '../models/event_model.dart';
 
 /// Event provider managing CRUD operations for events
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
+/// Event provider managing CRUD operations for events
 class EventProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
+  List<Event> _events = [];
+  final _supabase = sb.Supabase.instance.client;
 
-  // Mock events data
-  final List<Event> _events = [
-    Event(
-      id: 'event-001',
-      title: 'Tech Conference 2026',
-      description: 'Annual technology conference featuring the latest innovations in AI, cloud computing, and software development. Join industry leaders and experts for keynotes, workshops, and networking opportunities.',
-      date: DateTime(2026, 2, 15, 9, 0),
-      endDate: DateTime(2026, 2, 17, 18, 0),
-      location: 'Convention Center, New York',
-      organizerId: 'organizer-001',
-      organizerName: 'John Organizer',
-      isPublished: true,
-      capacity: 500,
-      category: 'Conference',
-      createdAt: DateTime(2025, 11, 1),
-    ),
-    Event(
-      id: 'event-002',
-      title: 'Flutter Workshop',
-      description: 'Hands-on workshop covering Flutter fundamentals, state management with Provider, and building beautiful mobile applications. Perfect for beginners and intermediate developers.',
-      date: DateTime(2026, 1, 25, 10, 0),
-      endDate: DateTime(2026, 1, 25, 17, 0),
-      location: 'Tech Hub, San Francisco',
-      organizerId: 'organizer-001',
-      organizerName: 'John Organizer',
-      isPublished: true,
-      capacity: 50,
-      category: 'Workshop',
-      createdAt: DateTime(2025, 12, 1),
-    ),
-    Event(
-      id: 'event-003',
-      title: 'Startup Networking Meetup',
-      description: 'Monthly networking event for entrepreneurs, investors, and startup enthusiasts. Share ideas, find co-founders, and connect with the local startup ecosystem.',
-      date: DateTime(2026, 1, 30, 18, 0),
-      endDate: DateTime(2026, 1, 30, 21, 0),
-      location: 'Innovation Hub, Austin',
-      organizerId: 'organizer-002',
-      organizerName: 'Sarah Events',
-      isPublished: true,
-      capacity: 100,
-      category: 'Networking',
-      createdAt: DateTime(2025, 12, 15),
-    ),
-    Event(
-      id: 'event-004',
-      title: 'AI & Machine Learning Seminar',
-      description: 'Deep dive into the latest advancements in artificial intelligence and machine learning. Topics include neural networks, natural language processing, and practical AI applications.',
-      date: DateTime(2026, 2, 5, 14, 0),
-      endDate: DateTime(2026, 2, 5, 18, 0),
-      location: 'University Auditorium, Boston',
-      organizerId: 'organizer-002',
-      organizerName: 'Sarah Events',
-      isPublished: true,
-      capacity: 200,
-      category: 'Seminar',
-      createdAt: DateTime(2025, 12, 20),
-    ),
-    Event(
-      id: 'event-005',
-      title: 'Hackathon 2026',
-      description: '48-hour hackathon challenging developers to build innovative solutions. Prizes for best overall, most creative, and best use of technology.',
-      date: DateTime(2026, 3, 1, 9, 0),
-      endDate: DateTime(2026, 3, 3, 17, 0),
-      location: 'Tech Campus, Seattle',
-      organizerId: 'organizer-001',
-      organizerName: 'John Organizer',
-      isPublished: false,
-      capacity: 150,
-      category: 'Hackathon',
-      createdAt: DateTime(2026, 1, 5),
-    ),
-  ];
+  EventProvider() {
+    fetchEvents();
+  }
+
+  /// Fetch all events from Supabase
+  Future<void> fetchEvents() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _supabase
+          .from('events')
+          .select()
+          .order('date', ascending: true);
+
+      final List<dynamic> data = response;
+      _events = data.map((json) => Event(
+        id: json['id'],
+        title: json['title'],
+        description: json['description'],
+        location: json['location'],
+        date: DateTime.parse(json['date']),
+        endDate: json['end_date'] != null ? DateTime.parse(json['end_date']) : DateTime.now(),
+        capacity: json['capacity'] ?? 0,
+        category: json['category'] ?? 'General',
+        isPublished: json['is_published'] ?? false,
+        organizerId: json['organizer_id'],
+        organizerName: 'Organizer', // We would need a join to get name, simplified for now
+        imageUrl: json['image_url'],
+        createdAt: DateTime.parse(json['created_at']),
+      )).toList();
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   // Getters
   List<Event> get events => List.unmodifiable(_events);
@@ -137,11 +110,22 @@ class EventProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
+      final response = await _supabase.from('events').insert({
+        'title': title,
+        'description': description,
+        'location': location,
+        'date': date.toIso8601String(),
+        'end_date': endDate.toIso8601String(),
+        'capacity': capacity,
+        'category': category,
+        'is_published': isPublished,
+        'organizer_id': organizerId,
+        'image_url': imageUrl,
+      }).select().single();
+
       final event = Event(
-        id: const Uuid().v4(),
+        id: response['id'],
         title: title,
         description: description,
         date: date,
@@ -153,7 +137,7 @@ class EventProvider with ChangeNotifier {
         imageUrl: imageUrl,
         capacity: capacity,
         category: category,
-        createdAt: DateTime.now(),
+        createdAt: DateTime.parse(response['created_at']),
       );
 
       _events.add(event);
@@ -174,15 +158,24 @@ class EventProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
-      final index = _events.indexWhere((e) => e.id == updatedEvent.id);
-      if (index == -1) {
-        throw Exception('Event not found');
-      }
+      await _supabase.from('events').update({
+        'title': updatedEvent.title,
+        'description': updatedEvent.description,
+        'location': updatedEvent.location,
+        'date': updatedEvent.date.toIso8601String(),
+        'end_date': updatedEvent.endDate.toIso8601String(),
+        'capacity': updatedEvent.capacity,
+        'category': updatedEvent.category,
+        'is_published': updatedEvent.isPublished,
+        'image_url': updatedEvent.imageUrl,
+      }).eq('id', updatedEvent.id);
 
-      _events[index] = updatedEvent;
+      final index = _events.indexWhere((e) => e.id == updatedEvent.id);
+      if (index != -1) {
+        _events[index] = updatedEvent;
+      }
+      
       _isLoading = false;
       notifyListeners();
       return true;
@@ -200,9 +193,9 @@ class EventProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
+      await _supabase.from('events').delete().eq('id', eventId);
+      
       _events.removeWhere((e) => e.id == eventId);
       _isLoading = false;
       notifyListeners();

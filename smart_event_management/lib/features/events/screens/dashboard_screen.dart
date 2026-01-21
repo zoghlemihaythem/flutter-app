@@ -290,12 +290,6 @@ class _QuickStats extends StatelessWidget {
             color: AppTheme.primaryColor,
           ),
           _StatCard(
-            icon: Icons.people,
-            value: '${context.read<AuthProvider>().allUsers.length}',
-            label: 'Users',
-            color: AppTheme.secondaryColor,
-          ),
-          _StatCard(
             icon: Icons.check_circle,
             value: '${eventProvider.publishedEvents.length}',
             label: 'Published',
@@ -423,85 +417,29 @@ class _UsersTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final users = authProvider.allUsers;
-
+    // TODO: Implement proper user management with Supabase Admin API
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Management'),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          final user = users[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.cardColor,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-              boxShadow: AppTheme.cardShadow,
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.build_circle_outlined, size: 64, color: AppTheme.primaryColor),
+            SizedBox(height: 16),
+            Text(
+              'User Management Coming Soon',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: _getRoleColor(user.role),
-                  child: Text(
-                    user.name[0].toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        user.email,
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getRoleColor(user.role).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    user.roleDisplayName,
-                    style: TextStyle(
-                      color: _getRoleColor(user.role),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+            SizedBox(height: 8),
+            Text(
+              'This feature requires Admin API access.',
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }

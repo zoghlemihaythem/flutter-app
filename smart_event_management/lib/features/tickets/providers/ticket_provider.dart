@@ -3,84 +3,17 @@ import 'package:uuid/uuid.dart';
 import '../models/ticket_model.dart';
 
 /// Ticket and Payment provider managing ticket purchases and mock payments
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
+/// Ticket and Payment provider managing ticket purchases and payments
 class TicketProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isProcessingPayment = false;
+  final _supabase = sb.Supabase.instance.client;
 
-  // Mock tickets data
-  final List<Ticket> _tickets = [
-    Ticket(
-      id: 'ticket-001',
-      eventId: 'event-001',
-      eventTitle: 'Tech Conference 2026',
-      userId: 'participant-001',
-      userName: 'Alice Participant',
-      type: TicketType.standard,
-      price: 99.99,
-      qrCode: 'TECH2026-STD-001-ALICE',
-      paymentStatus: PaymentStatus.completed,
-      purchasedAt: DateTime(2025, 12, 1),
-    ),
-    Ticket(
-      id: 'ticket-002',
-      eventId: 'event-001',
-      eventTitle: 'Tech Conference 2026',
-      userId: 'participant-002',
-      userName: 'Bob Attendee',
-      type: TicketType.vip,
-      price: 249.99,
-      qrCode: 'TECH2026-VIP-002-BOB',
-      paymentStatus: PaymentStatus.completed,
-      purchasedAt: DateTime(2025, 12, 5),
-    ),
-    Ticket(
-      id: 'ticket-003',
-      eventId: 'event-002',
-      eventTitle: 'Flutter Workshop',
-      userId: 'participant-001',
-      userName: 'Alice Participant',
-      type: TicketType.standard,
-      price: 49.99,
-      qrCode: 'FLUTTER-STD-003-ALICE',
-      paymentStatus: PaymentStatus.completed,
-      purchasedAt: DateTime(2025, 12, 10),
-    ),
-    Ticket(
-      id: 'ticket-004',
-      eventId: 'event-003',
-      eventTitle: 'Startup Networking Meetup',
-      userId: 'participant-003',
-      userName: 'Charlie Guest',
-      type: TicketType.free,
-      price: 0.0,
-      qrCode: 'STARTUP-FREE-004-CHARLIE',
-      paymentStatus: PaymentStatus.completed,
-      purchasedAt: DateTime(2025, 12, 20),
-    ),
-  ];
-
-  // Ticket pricing for events
-  final Map<String, List<TicketPrice>> _eventTicketPrices = {
-    'event-001': [
-      const TicketPrice(type: TicketType.standard, price: 99.99, available: 400, description: 'General admission with access to all sessions'),
-      const TicketPrice(type: TicketType.vip, price: 249.99, available: 50, description: 'VIP access with exclusive networking events and priority seating'),
-    ],
-    'event-002': [
-      const TicketPrice(type: TicketType.standard, price: 49.99, available: 40, description: 'Workshop access with materials included'),
-    ],
-    'event-003': [
-      const TicketPrice(type: TicketType.free, price: 0.0, available: 100, description: 'Free admission'),
-    ],
-    'event-004': [
-      const TicketPrice(type: TicketType.free, price: 0.0, available: 150, description: 'Free admission'),
-      const TicketPrice(type: TicketType.standard, price: 25.00, available: 50, description: 'Reserved seating with certificate'),
-    ],
-    'event-005': [
-      const TicketPrice(type: TicketType.standard, price: 29.99, available: 100, description: 'Participant registration'),
-      const TicketPrice(type: TicketType.vip, price: 79.99, available: 20, description: 'Mentor access and premium support'),
-    ],
-  };
+  List<Ticket> _tickets = [];
+  Map<String, List<TicketPrice>> _eventTicketPrices = {};
 
   // Getters
   List<Ticket> get tickets => List.unmodifiable(_tickets);
@@ -88,60 +21,72 @@ class TicketProvider with ChangeNotifier {
   bool get isProcessingPayment => _isProcessingPayment;
   String? get error => _error;
 
-  /// Get tickets for a specific user
-  List<Ticket> getTicketsByUser(String userId) {
-    return _tickets.where((t) => t.userId == userId).toList();
+  /// Fetch tickets for the current user
+  Future<void> fetchUserTickets(String userId) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('*, events(title)')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      final List<dynamic> data = response;
+      _tickets = data.map((json) => Ticket(
+        id: json['id'],
+        eventId: json['event_id'],
+        eventTitle: json['events']['title'] ?? 'Unknown Event',
+        userId: json['user_id'],
+        userName: 'User', // Retrieved from profile usually
+        type: _parseTicketType(json['type']),
+        price: (json['price'] as num).toDouble(),
+        qrCode: json['qr_code'],
+        paymentStatus: _parsePaymentStatus(json['payment_status']),
+        purchasedAt: DateTime.parse(json['created_at']),
+        isUsed: json['is_used'] ?? false,
+      )).toList();
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  /// Get tickets for a specific event
-  List<Ticket> getTicketsByEvent(String eventId) {
-    return _tickets.where((t) => t.eventId == eventId).toList();
-  }
-
-  /// Get ticket pricing for an event
+  /// Get ticket prices for an event (fetched from 'event_ticket_configs' table)
   List<TicketPrice> getTicketPrices(String eventId) {
     return _eventTicketPrices[eventId] ?? [];
   }
 
-  /// Check if user has ticket for an event
-  bool hasTicket(String userId, String eventId) {
-    return _tickets.any((t) =>
-        t.userId == userId &&
-        t.eventId == eventId &&
-        t.paymentStatus == PaymentStatus.completed
-    );
-  }
-
-  /// Get a specific ticket
-  Ticket? getTicket(String ticketId) {
+  /// Fetch ticket configurations for an event
+  Future<void> fetchTicketConfigs(String eventId) async {
     try {
-      return _tickets.firstWhere((t) => t.id == ticketId);
-    } catch (_) {
-      return null;
+      final response = await _supabase
+          .from('event_ticket_configs')
+          .select()
+          .eq('event_id', eventId);
+
+      final List<dynamic> data = response;
+      final prices = data.map((json) => TicketPrice(
+        type: _parseTicketType(json['ticket_type']),
+        price: (json['price'] as num).toDouble(),
+        available: json['available_quantity'],
+        description: json['description'] ?? '',
+      )).toList();
+
+      _eventTicketPrices[eventId] = prices;
+      notifyListeners();
+    } catch (e) {
+      // If table doesn't exist or empty, fall back to defaults or empty
+      debugPrint('Error fetching config: $e');
     }
   }
 
-  /// Get user's ticket for a specific event
-  Ticket? getUserTicketForEvent(String userId, String eventId) {
-    try {
-      return _tickets.firstWhere((t) =>
-          t.userId == userId &&
-          t.eventId == eventId &&
-          t.paymentStatus == PaymentStatus.completed
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Generate QR code data
-  String _generateQRCode(String eventId, TicketType type, String ticketId, String userName) {
-    final typePrefix = type == TicketType.vip ? 'VIP' : type == TicketType.free ? 'FREE' : 'STD';
-    final namePart = userName.split(' ').first.toUpperCase();
-    return 'EVT-$typePrefix-${ticketId.substring(0, 8)}-$namePart';
-  }
-
-  /// Purchase a ticket (mock payment)
+  /// Purchase a ticket
   Future<Ticket?> purchaseTicket({
     required String eventId,
     required String eventTitle,
@@ -159,40 +104,47 @@ class TicketProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // Check if already has ticket
-      if (hasTicket(userId, eventId)) {
-        throw Exception('You already have a ticket for this event');
-      }
+        // 1. Simulate Payment Gateway Check
+       if (price > 0) {
+         await Future.delayed(const Duration(seconds: 2));
+         // Add real payment gateway logic here (Stripe/PayPal)
+       }
 
-      // Simulate payment processing delay
-      await Future.delayed(const Duration(seconds: 2));
+      // 2. Insert Ticket
+      final typeStr = type.toString().split('.').last;
+      final qrData = 'EVT-${typeStr.toUpperCase()}-$eventId-$userId';
 
-      // Mock payment validation (simulate occasional failures for demo)
-      if (price > 0 && cardNumber == '0000000000000000') {
-        throw Exception('Payment declined. Please check your card details.');
-      }
+      final response = await _supabase.from('tickets').insert({
+        'event_id': eventId,
+        'user_id': userId,
+        'type': typeStr,
+        'price': price,
+        'qr_code': qrData,
+        'payment_status': 'completed',
+        'is_used': false,
+      }).select().single();
 
-      final ticketId = const Uuid().v4();
       final ticket = Ticket(
-        id: ticketId,
+        id: response['id'],
         eventId: eventId,
         eventTitle: eventTitle,
         userId: userId,
         userName: userName,
         type: type,
         price: price,
-        qrCode: _generateQRCode(eventId, type, ticketId, userName),
+        qrCode: qrData,
         paymentStatus: PaymentStatus.completed,
-        purchasedAt: DateTime.now(),
+        purchasedAt: DateTime.parse(response['created_at']),
       );
 
-      _tickets.add(ticket);
+      _tickets.insert(0, ticket);
+      
       _isLoading = false;
       _isProcessingPayment = false;
       notifyListeners();
       return ticket;
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '');
+      _error = e.toString();
       _isLoading = false;
       _isProcessingPayment = false;
       notifyListeners();
@@ -200,77 +152,88 @@ class TicketProvider with ChangeNotifier {
     }
   }
 
-  /// Mark ticket as used (for check-in)
+  /// Mark ticket as used
   Future<bool> useTicket(String ticketId) async {
     _isLoading = true;
-    _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 300));
-
     try {
+      await _supabase
+          .from('tickets')
+          .update({'is_used': true})
+          .eq('id', ticketId);
+      
       final index = _tickets.indexWhere((t) => t.id == ticketId);
-      if (index == -1) {
-        throw Exception('Ticket not found');
+      if (index != -1) {
+        _tickets[index] = _tickets[index].copyWith(isUsed: true);
       }
-
-      if (_tickets[index].isUsed) {
-        throw Exception('Ticket has already been used');
-      }
-
-      _tickets[index] = _tickets[index].copyWith(isUsed: true);
 
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '');
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  /// Request refund (mock)
-  Future<bool> requestRefund(String ticketId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  // --- Helpers ---
 
-    await Future.delayed(const Duration(seconds: 1));
-
-    try {
-      final index = _tickets.indexWhere((t) => t.id == ticketId);
-      if (index == -1) {
-        throw Exception('Ticket not found');
-      }
-
-      if (_tickets[index].isUsed) {
-        throw Exception('Cannot refund a used ticket');
-      }
-
-      _tickets[index] = _tickets[index].copyWith(paymentStatus: PaymentStatus.refunded);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '');
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
+  TicketType _parseTicketType(String type) {
+    return TicketType.values.firstWhere(
+      (e) => e.toString().split('.').last == type,
+      orElse: () => TicketType.standard,
+    );
   }
 
-  /// Set ticket prices for an event (for organizers)
-  void setEventTicketPrices(String eventId, List<TicketPrice> prices) {
+  PaymentStatus _parsePaymentStatus(String status) {
+    return PaymentStatus.values.firstWhere(
+      (e) => e.toString().split('.').last == status,
+      orElse: () => PaymentStatus.completed,
+    );
+  }
+
+  /// Set ticket prices (Saves to DB)
+  Future<void> setEventTicketPrices(String eventId, List<TicketPrice> prices) async {
     _eventTicketPrices[eventId] = prices;
     notifyListeners();
+
+    // Persist to DB
+    try {
+      // Clear existing configs for this event
+      await _supabase.from('event_ticket_configs').delete().eq('event_id', eventId);
+      
+      // Insert new configs
+      for (var p in prices) {
+        await _supabase.from('event_ticket_configs').insert({
+          'event_id': eventId,
+          'ticket_type': p.type.toString().split('.').last,
+          'price': p.price,
+          'available_quantity': p.available,
+          'description': p.description,
+        });
+      }
+    } catch (e) {
+      debugPrint('Error saving ticket config: $e');
+    }
   }
 
-  /// Clear error
-  void clearError() {
-    _error = null;
-    notifyListeners();
+  // Legacy/Mock methods to keep UI working until full refactor
+  List<Ticket> getTicketsByUser(String userId) => _tickets.where((t) => t.userId == userId).toList();
+  Ticket? getUserTicketForEvent(String userId, String eventId) {
+     try {
+       return _tickets.firstWhere((t) => t.userId == userId && t.eventId == eventId);
+     } catch (_) { return null; }
+  }
+  /// Check if user has ticket for an event
+  bool hasTicket(String userId, String eventId) {
+    // This assumes fetchUserTickets(userId) has been called.
+    return _tickets.any((t) =>
+        t.userId == userId &&
+        t.eventId == eventId &&
+        t.paymentStatus == PaymentStatus.completed
+    );
   }
 }
