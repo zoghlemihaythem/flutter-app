@@ -6,6 +6,8 @@ import '../../../shared/widgets/common_widgets.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/event_model.dart';
 import '../providers/event_provider.dart';
+import '../../tickets/models/ticket_model.dart';
+import '../../tickets/providers/ticket_provider.dart';
 
 /// Form screen for creating and editing events
 class EventFormScreen extends StatefulWidget {
@@ -107,7 +109,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
       );
       await eventProvider.updateEvent(updated);
     } else {
-      await eventProvider.createEvent(
+      final newEvent = await eventProvider.createEvent(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         date: _startDate,
@@ -119,6 +121,25 @@ class _EventFormScreenState extends State<EventFormScreen> {
         category: _category,
         isPublished: _isPublished,
       );
+
+      // Initialize default tickets for the new event
+      if (newEvent != null && mounted) {
+        final ticketProvider = context.read<TicketProvider>();
+        ticketProvider.setEventTicketPrices(newEvent.id, [
+          const TicketPrice(
+            type: TicketType.standard,
+            price: 0,
+            available: 100,
+            description: 'General Admission',
+          ),
+          const TicketPrice(
+            type: TicketType.vip,
+            price: 50.0,
+            available: 50,
+            description: 'VIP Access with premium perks',
+          ),
+        ]);
+      }
     }
 
     if (mounted) Navigator.pop(context);
