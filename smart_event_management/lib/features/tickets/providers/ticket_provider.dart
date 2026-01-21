@@ -138,6 +138,22 @@ class TicketProvider with ChangeNotifier {
       );
 
       _tickets.insert(0, ticket);
+
+      // 3. Auto-Register User for Event
+      try {
+        await _supabase.from('registrations').upsert({
+          'event_id': eventId,
+          'user_id': userId,
+          'user_name': userName,
+          // We don't have email here easily, but the DB trigger might handle it 
+          // or we can fetch it. For now, we rely on the fact that the user is authenticated.
+          // Ideally, we should pass email to purchaseTicket too.
+          'status': 'registered',
+        }, onConflict: 'event_id, user_id'); // Ensure uniqueness constraint
+      } catch (e) {
+        debugPrint('⚠️ Auto-registration warning: $e');
+        // Continue even if registration fails (e.g. already registered)
+      }
       
       _isLoading = false;
       _isProcessingPayment = false;

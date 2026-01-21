@@ -45,10 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _fillDemoCredentials(String email, String password) {
-    _emailController.text = email;
-    _passwordController.text = password;
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -186,133 +183,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32),
-
-                  // Demo credentials section
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.infoColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                      border: Border.all(
-                        color: AppTheme.infoColor.withOpacity(0.3),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 18,
-                              color: AppTheme.infoColor,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Demo Credentials',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.infoColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _DemoCredentialButton(
-                          role: 'Admin',
-                          email: 'admin@example.com',
-                          onTap: () => _fillDemoCredentials(
-                            'admin@example.com',
-                            'admin123',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _DemoCredentialButton(
-                          role: 'Organizer',
-                          email: 'organizer@example.com',
-                          onTap: () => _fillDemoCredentials(
-                            'organizer@example.com',
-                            'organizer123',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _DemoCredentialButton(
-                          role: 'Participant',
-                          email: 'alice@example.com',
-                          onTap: () => _fillDemoCredentials(
-                            'alice@example.com',
-                            'alice123',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DemoCredentialButton extends StatelessWidget {
-  final String role;
-  final String email;
-  final VoidCallback onTap;
-
-  const _DemoCredentialButton({
-    required this.role,
-    required this.email,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                role,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                email,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ),
-            const Icon(
-              Icons.arrow_forward_ios,
-              size: 12,
-              color: AppTheme.textTertiary,
-            ),
-          ],
         ),
       ),
     );
