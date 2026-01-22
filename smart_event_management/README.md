@@ -16,7 +16,7 @@ A powerful, full-stack Event Management System built with **Flutter** and **Supa
 - 📊 **Real-time Analytics**: Dashboard with live stats for event performance.
 - 🎨 **Modern UI/UX**: Glassmorphism, smooth animations, and responsive design.
 
-[**Explore full features list ➡️**](FEATURES.md)
+[**Explore full features list ➡️**](FEATURES.md) | [**Technical deep dive ➡️**](TECHNICAL_DETAILS.md)
 
 ---
 
