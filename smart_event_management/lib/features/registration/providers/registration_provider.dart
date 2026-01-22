@@ -51,6 +51,59 @@ class RegistrationProvider with ChangeNotifier {
     }
   }
 
+  String? _currentFetchingEventId;
+
+  /// Fetch registrations for a specific event (for organizers)
+  Future<void> fetchEventRegistrations(String eventId) async {
+    if (_isLoading && _currentFetchingEventId == eventId) return;
+
+    _isLoading = true;
+    _currentFetchingEventId = eventId;
+    _error = null;
+    // Removed immediate notifyListeners() to prevent build loops
+
+    try {
+      debugPrint('📋 Fetching registrations for event: $eventId');
+      final response = await _supabase
+          .from('registrations')
+          .select()
+          .eq('event_id', eventId)
+          .order('created_at', ascending: false);
+      
+      final List<dynamic> data = response;
+      
+      // Merge with existing registrations (avoid duplicates)
+      for (var json in data) {
+        final exists = _registrations.any((r) => r.id == json['id']);
+        if (!exists) {
+          _registrations.add(Registration(
+            id: json['id'],
+            eventId: json['event_id'],
+            userId: json['user_id'],
+            userName: json['user_name'] ?? 'User',
+            userEmail: json['user_email'] ?? '',
+            status: _parseCheckInStatus(json['status'] ?? 'registered'),
+            registeredAt: DateTime.parse(json['created_at']),
+            checkedInAt: json['checked_in_at'] != null 
+                ? DateTime.parse(json['checked_in_at']) 
+                : null,
+          ));
+        }
+      }
+
+      debugPrint('✅ Loaded ${data.length} registrations for event');
+      _isLoading = false;
+      _currentFetchingEventId = null;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Error fetching event registrations: $e');
+      _error = e.toString();
+      _isLoading = false;
+      _currentFetchingEventId = null;
+      notifyListeners();
+    }
+  }
+
   /// Register user for an event
   Future<Registration?> registerForEvent({
     required String eventId,

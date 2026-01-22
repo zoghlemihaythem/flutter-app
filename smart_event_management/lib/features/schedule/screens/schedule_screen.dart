@@ -23,17 +23,27 @@ class ScheduleScreen extends StatefulWidget {
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProviderStateMixin {
+class _ScheduleScreenState extends State<ScheduleScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   List<DateTime> _eventDates = [];
 
   @override
   void initState() {
     super.initState();
-    _initDates();
+    // Pre-initialize with length 1 to avoid "late initialization" error in build
+    _tabController = TabController(length: 1, vsync: this);
+    _fetchSessionsAndInit();
   }
 
-  void _initDates() {
+  Future<void> _fetchSessionsAndInit() async {
+    final scheduleProvider = context.read<ScheduleProvider>();
+    await scheduleProvider.fetchSessions(widget.eventId);
+    if (mounted) {
+      _initTabs();
+    }
+  }
+
+  void _initTabs() {
     final scheduleProvider = context.read<ScheduleProvider>();
     _eventDates = scheduleProvider.getEventDates(widget.eventId);
     if (_eventDates.isEmpty) {
@@ -43,7 +53,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
         _eventDates = [event.date];
       }
     }
+    
+    // Create new tab controller with correct length
+    final oldController = _tabController;
     _tabController = TabController(length: _eventDates.length.clamp(1, 10), vsync: this);
+    setState(() {}); // Refresh UI with new controller
+    
+    // Clean up old controller if it exists (though it might not on first run)
+    try {
+      oldController.dispose();
+    } catch (_) {}
   }
 
   @override

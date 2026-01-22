@@ -539,35 +539,226 @@ class _StatCard extends StatelessWidget {
 }
 
 /// Users management tab (Admin only)
-class _UsersTab extends StatelessWidget {
+class _UsersTab extends StatefulWidget {
   const _UsersTab();
 
   @override
+  State<_UsersTab> createState() => _UsersTabState();
+}
+
+class _UsersTabState extends State<_UsersTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch users when tab loads
+    Future.microtask(() => context.read<AuthProvider>().fetchAllUsers());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // TODO: Implement proper user management with Supabase Admin API
-    
+    final authProvider = context.watch<AuthProvider>();
+    final users = authProvider.allUsers;
+    final isLoading = authProvider.isLoading;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Management'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => authProvider.fetchAllUsers(),
+          ),
+        ],
       ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.build_circle_outlined, size: 64, color: AppTheme.primaryColor),
-            SizedBox(height: 16),
-            Text(
-              'User Management Coming Soon',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'This feature requires Admin API access.',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      ),
+      body: isLoading && users.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : users.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline, size: 64, color: AppTheme.textTertiary),
+                      SizedBox(height: 16),
+                      Text('No users found', style: TextStyle(fontSize: 18)),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () => authProvider.fetchAllUsers(),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      final user = users[index];
+                      final isCurrentUser = user.id == authProvider.currentUser?.id;
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cardColor,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                          boxShadow: AppTheme.cardShadow,
+                          border: isCurrentUser 
+                              ? Border.all(color: AppTheme.primaryColor, width: 2)
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: _getRoleColor(user.role),
+                              child: Text(
+                                user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          user.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isCurrentUser) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'YOU',
+                                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    user.email,
+                                    style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 14,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Role dropdown
+                            DropdownButton<UserRole>(
+                              value: user.role,
+                              underline: const SizedBox(),
+                              borderRadius: BorderRadius.circular(8),
+                              items: UserRole.values.map((role) {
+                                return DropdownMenuItem(
+                                  value: role,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _getRoleColor(role).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      role.toString().split('.').last.toUpperCase(),
+                                      style: TextStyle(
+                                        color: _getRoleColor(role),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: isCurrentUser ? null : (newRole) async {
+                                if (newRole != null && newRole != user.role) {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Change Role'),
+                                      content: Text('Change ${user.name}\'s role to ${newRole.toString().split('.').last}?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () => Navigator.pop(ctx, true),
+                                          child: const Text('Confirm'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await authProvider.updateUserRole(user.id, newRole);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Role updated to ${newRole.toString().split('.').last}')),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
+                            ),
+                            // Delete button (not for current user)
+                            if (!isCurrentUser)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Delete User'),
+                                      content: Text('Are you sure you want to delete ${user.name}?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () => Navigator.pop(ctx, true),
+                                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+                                          child: const Text('Delete'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    final success = await authProvider.deleteUser(user.id);
+                                    if (success && context.mounted) {
+                                      // Refresh events list to remove deleted organizer's events
+                                      context.read<EventProvider>().fetchEvents();
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('User and their events deleted')),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
     );
   }
 

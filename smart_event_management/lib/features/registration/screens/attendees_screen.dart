@@ -8,28 +8,47 @@ import '../models/registration_model.dart';
 import '../providers/registration_provider.dart';
 
 /// Screen for organizers to view and manage attendees
-class AttendeesScreen extends StatelessWidget {
+class AttendeesScreen extends StatefulWidget {
   final String eventId;
 
   const AttendeesScreen({super.key, required this.eventId});
 
   @override
+  State<AttendeesScreen> createState() => _AttendeesScreenState();
+}
+
+class _AttendeesScreenState extends State<AttendeesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch registrations for this event when screen loads
+    Future.microtask(() => 
+      context.read<RegistrationProvider>().fetchEventRegistrations(widget.eventId)
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final registrationProvider = context.watch<RegistrationProvider>();
     final eventProvider = context.watch<EventProvider>();
-    final event = eventProvider.getEventById(eventId);
-    final registrations = registrationProvider.getRegistrationsByEvent(eventId);
-    final checkedInCount = registrationProvider.getCheckedInCount(eventId);
+    final event = eventProvider.getEventById(widget.eventId);
+    final registrations = registrationProvider.getRegistrationsByEvent(widget.eventId);
+    final checkedInCount = registrationProvider.getCheckedInCount(widget.eventId);
+    final isLoading = registrationProvider.isLoading;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Attendees'),
+        title: Text(event?.title ?? 'Attendees'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => registrationProvider.fetchEventRegistrations(widget.eventId),
+          ),
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Text(
-                '$checkedInCount/${registrations.length} checked in',
+                '$checkedInCount/${registrations.length}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -73,29 +92,34 @@ class AttendeesScreen extends StatelessWidget {
 
           // Attendee list
           Expanded(
-            child: registrations.isEmpty
-                ? const EmptyState(
-                    icon: Icons.people_outline,
-                    title: 'No Registrations Yet',
-                    subtitle: 'Share your event to get more attendees',
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: registrations.length,
-                    itemBuilder: (context, index) {
-                      final registration = registrations[index];
-                      return _AttendeeCard(
-                        registration: registration,
-                        onCheckIn: () async {
-                          if (registration.isCheckedIn) {
-                            await registrationProvider.undoCheckIn(registration.id);
-                          } else {
-                            await registrationProvider.checkIn(registration.id);
-                          }
-                        },
-                      );
-                    },
-                  ),
+            child: isLoading && registrations.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : registrations.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.people_outline,
+                        title: 'No Registrations Yet',
+                        subtitle: 'Share your event to get more attendees',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () => registrationProvider.fetchEventRegistrations(widget.eventId),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: registrations.length,
+                          itemBuilder: (context, index) {
+                            final registration = registrations[index];
+                            return _AttendeeCard(
+                              registration: registration,
+                              onCheckIn: () async {
+                                if (registration.isCheckedIn) {
+                                  await registrationProvider.undoCheckIn(registration.id);
+                                } else {
+                                  await registrationProvider.checkIn(registration.id);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
           ),
         ],
       ),

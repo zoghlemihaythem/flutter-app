@@ -1,135 +1,77 @@
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../models/session_model.dart';
 
 /// Schedule provider managing event sessions and agenda
 class ScheduleProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
+  final _supabase = sb.Supabase.instance.client;
 
-  // Mock sessions data
-  final List<Session> _sessions = [
-    // Tech Conference 2026 sessions (event-001)
-    Session(
-      id: 'session-001',
-      eventId: 'event-001',
-      title: 'Opening Keynote: The Future of Technology',
-      description: 'Welcome address and overview of emerging technology trends that will shape the next decade.',
-      startTime: DateTime(2026, 2, 15, 9, 0),
-      endTime: DateTime(2026, 2, 15, 10, 0),
-      speaker: 'Dr. Jane Smith',
-      speakerBio: 'CEO of TechVision, former VP at Google',
-      location: 'Main Hall',
-    ),
-    Session(
-      id: 'session-002',
-      eventId: 'event-001',
-      title: 'AI in Practice: Real-world Applications',
-      description: 'Deep dive into how companies are implementing AI solutions today.',
-      startTime: DateTime(2026, 2, 15, 10, 30),
-      endTime: DateTime(2026, 2, 15, 12, 0),
-      speaker: 'Prof. Michael Chen',
-      speakerBio: 'AI Research Lead at Stanford University',
-      location: 'Room A',
-    ),
-    Session(
-      id: 'session-003',
-      eventId: 'event-001',
-      title: 'Lunch Break & Networking',
-      description: 'Enjoy lunch while networking with fellow attendees.',
-      startTime: DateTime(2026, 2, 15, 12, 0),
-      endTime: DateTime(2026, 2, 15, 13, 30),
-      speaker: 'Networking',
-      location: 'Cafeteria',
-    ),
-    Session(
-      id: 'session-004',
-      eventId: 'event-001',
-      title: 'Cloud Architecture Best Practices',
-      description: 'Learn how to design scalable and resilient cloud infrastructure.',
-      startTime: DateTime(2026, 2, 15, 13, 30),
-      endTime: DateTime(2026, 2, 15, 15, 0),
-      speaker: 'Sarah Johnson',
-      speakerBio: 'Principal Cloud Architect at AWS',
-      location: 'Room B',
-    ),
-    Session(
-      id: 'session-005',
-      eventId: 'event-001',
-      title: 'Panel Discussion: Ethics in Tech',
-      description: 'Industry leaders discuss ethical considerations in modern technology development.',
-      startTime: DateTime(2026, 2, 15, 15, 30),
-      endTime: DateTime(2026, 2, 15, 17, 0),
-      speaker: 'Panel',
-      location: 'Main Hall',
-    ),
-
-    // Flutter Workshop sessions (event-002)
-    Session(
-      id: 'session-006',
-      eventId: 'event-002',
-      title: 'Flutter Fundamentals',
-      description: 'Introduction to Flutter framework and Dart programming language.',
-      startTime: DateTime(2026, 1, 25, 10, 0),
-      endTime: DateTime(2026, 1, 25, 12, 0),
-      speaker: 'Alex Developer',
-      speakerBio: 'Google Developer Expert for Flutter',
-      location: 'Workshop Room 1',
-    ),
-    Session(
-      id: 'session-007',
-      eventId: 'event-002',
-      title: 'State Management with Provider',
-      description: 'Master state management using the Provider package.',
-      startTime: DateTime(2026, 1, 25, 13, 0),
-      endTime: DateTime(2026, 1, 25, 15, 0),
-      speaker: 'Alex Developer',
-      speakerBio: 'Google Developer Expert for Flutter',
-      location: 'Workshop Room 1',
-    ),
-    Session(
-      id: 'session-008',
-      eventId: 'event-002',
-      title: 'Building Beautiful UIs',
-      description: 'Create stunning user interfaces with Flutter widgets.',
-      startTime: DateTime(2026, 1, 25, 15, 30),
-      endTime: DateTime(2026, 1, 25, 17, 0),
-      speaker: 'Maria Designer',
-      speakerBio: 'UI/UX Designer and Flutter Developer',
-      location: 'Workshop Room 1',
-    ),
-
-    // AI Seminar sessions (event-004)
-    Session(
-      id: 'session-009',
-      eventId: 'event-004',
-      title: 'Introduction to Neural Networks',
-      description: 'Understanding the basics of neural network architecture.',
-      startTime: DateTime(2026, 2, 5, 14, 0),
-      endTime: DateTime(2026, 2, 5, 15, 30),
-      speaker: 'Dr. Emily Watson',
-      speakerBio: 'AI Researcher at OpenAI',
-      location: 'Lecture Hall 1',
-    ),
-    Session(
-      id: 'session-010',
-      eventId: 'event-004',
-      title: 'NLP: From Basics to GPT',
-      description: 'Evolution of natural language processing and modern language models.',
-      startTime: DateTime(2026, 2, 5, 15, 45),
-      endTime: DateTime(2026, 2, 5, 17, 15),
-      speaker: 'Dr. David Lee',
-      speakerBio: 'NLP Specialist at DeepMind',
-      location: 'Lecture Hall 1',
-    ),
-  ];
+  List<Session> _sessions = [];
 
   // Getters
   List<Session> get sessions => List.unmodifiable(_sessions);
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  /// Get sessions for a specific event
+  /// Current event being fetched to avoid redundant calls
+  String? _currentFetchingEventId;
+
+  /// Fetch sessions for a specific event
+  Future<void> fetchSessions(String eventId) async {
+    // Avoid redundant calls for the same event if already loading
+    if (_isLoading && _currentFetchingEventId == eventId) return;
+
+    _isLoading = true;
+    _currentFetchingEventId = eventId;
+    _error = null;
+    
+    // Use a slight delay or post-frame next cycle if needed, 
+    // but usually not calling notifyListeners here if we can help it or doing it carefully
+    // notifyListeners(); // Removed to avoid "setState during build" errors if called from build
+
+    try {
+      debugPrint('📅 Fetching sessions for event: $eventId');
+      final response = await _supabase
+          .from('sessions')
+          .select()
+          .eq('event_id', eventId)
+          .order('start_time', ascending: true);
+
+      final List<dynamic> data = response;
+      
+      // Filter out old sessions for this event and replace with new ones
+      _sessions.removeWhere((s) => s.eventId == eventId);
+      
+      final eventSessions = data.map((json) => Session(
+        id: json['id'],
+        eventId: json['event_id'],
+        title: json['title'],
+        description: json['description'] ?? '',
+        startTime: DateTime.parse(json['start_time']),
+        endTime: DateTime.parse(json['end_time']),
+        speaker: json['speaker'] ?? 'Speaker',
+        speakerBio: json['speaker_bio'],
+        location: json['location'],
+      )).toList();
+
+      _sessions.addAll(eventSessions);
+      
+      debugPrint('✅ Loaded ${eventSessions.length} sessions');
+      _isLoading = false;
+      _currentFetchingEventId = null;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Error fetching sessions: $e');
+      _error = e.toString();
+      _isLoading = false;
+      _currentFetchingEventId = null;
+      notifyListeners();
+    }
+  }
+
+  /// Get sessions for a specific event (filtered from local list)
   List<Session> getSessionsByEvent(String eventId) {
     final eventSessions = _sessions.where((s) => s.eventId == eventId).toList();
     eventSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -148,6 +90,8 @@ class ScheduleProvider with ChangeNotifier {
   /// Get unique dates for an event (for multi-day events)
   List<DateTime> getEventDates(String eventId) {
     final sessions = getSessionsByEvent(eventId);
+    if (sessions.isEmpty) return [];
+    
     final dates = <DateTime>{};
     for (final session in sessions) {
       dates.add(DateTime(
@@ -157,15 +101,6 @@ class ScheduleProvider with ChangeNotifier {
       ));
     }
     return dates.toList()..sort();
-  }
-
-  /// Get session by ID
-  Session? getSessionById(String id) {
-    try {
-      return _sessions.firstWhere((s) => s.id == id);
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Create a new session
@@ -183,11 +118,20 @@ class ScheduleProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
+      final response = await _supabase.from('sessions').insert({
+        'event_id': eventId,
+        'title': title,
+        'description': description,
+        'start_time': startTime.toIso8601String(),
+        'end_time': endTime.toIso8601String(),
+        'speaker': speaker,
+        'speaker_bio': speakerBio,
+        'location': location,
+      }).select().single();
+
       final session = Session(
-        id: const Uuid().v4(),
+        id: response['id'],
         eventId: eventId,
         title: title,
         description: description,
@@ -203,6 +147,7 @@ class ScheduleProvider with ChangeNotifier {
       notifyListeners();
       return session;
     } catch (e) {
+      debugPrint('❌ Error creating session: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -216,19 +161,27 @@ class ScheduleProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
-      final index = _sessions.indexWhere((s) => s.id == updatedSession.id);
-      if (index == -1) {
-        throw Exception('Session not found');
-      }
+      await _supabase.from('sessions').update({
+        'title': updatedSession.title,
+        'description': updatedSession.description,
+        'start_time': updatedSession.startTime.toIso8601String(),
+        'end_time': updatedSession.endTime.toIso8601String(),
+        'speaker': updatedSession.speaker,
+        'speaker_bio': updatedSession.speakerBio,
+        'location': updatedSession.location,
+      }).eq('id', updatedSession.id);
 
-      _sessions[index] = updatedSession;
+      final index = _sessions.indexWhere((s) => s.id == updatedSession.id);
+      if (index != -1) {
+        _sessions[index] = updatedSession;
+      }
+      
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('❌ Error updating session: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -242,14 +195,15 @@ class ScheduleProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
+      await _supabase.from('sessions').delete().eq('id', sessionId);
+      
       _sessions.removeWhere((s) => s.id == sessionId);
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('❌ Error deleting session: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();

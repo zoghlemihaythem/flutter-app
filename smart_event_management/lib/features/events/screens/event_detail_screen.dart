@@ -14,10 +14,27 @@ import '../providers/event_provider.dart';
 import 'event_form_screen.dart';
 
 /// Detailed view of a single event
-class EventDetailScreen extends StatelessWidget {
+class EventDetailScreen extends StatefulWidget {
   final String eventId;
 
   const EventDetailScreen({super.key, required this.eventId});
+
+  @override
+  State<EventDetailScreen> createState() => _EventDetailScreenState();
+}
+
+class _EventDetailScreenState extends State<EventDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch data once when the screen is opened
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ScheduleProvider>().fetchSessions(widget.eventId);
+        context.read<RegistrationProvider>().fetchEventRegistrations(widget.eventId);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +44,7 @@ class EventDetailScreen extends StatelessWidget {
     final scheduleProvider = context.watch<ScheduleProvider>();
     final ticketProvider = context.watch<TicketProvider>();
 
-    final event = eventProvider.getEventById(eventId);
+    final event = eventProvider.getEventById(widget.eventId);
 
     if (event == null) {
       return Scaffold(
@@ -44,9 +61,9 @@ class EventDetailScreen extends StatelessWidget {
     final isOrganizer = user?.id == event.organizerId;
     final isAdmin = authProvider.isAdmin;
     final canManage = isOrganizer || isAdmin;
-    final registrationCount = registrationProvider.getRegistrationCount(eventId);
-    final sessionCount = scheduleProvider.getSessionsByEvent(eventId).length;
-    final hasTicket = user != null && ticketProvider.hasTicket(user.id, eventId);
+    final registrationCount = registrationProvider.getRegistrationCount(widget.eventId);
+    final sessionCount = scheduleProvider.getSessionsByEvent(widget.eventId).length;
+    final hasTicket = user != null && ticketProvider.hasTicket(user.id, widget.eventId);
 
     return Scaffold(
       body: CustomScrollView(
@@ -99,7 +116,7 @@ class EventDetailScreen extends StatelessWidget {
                 PopupMenuButton<String>(
                   onSelected: (value) async {
                     if (value == 'toggle_publish') {
-                      await eventProvider.togglePublish(eventId);
+                      await eventProvider.togglePublish(widget.eventId);
                     } else if (value == 'delete') {
                       final confirm = await showDialog<bool>(
                         context: context,
@@ -117,7 +134,7 @@ class EventDetailScreen extends StatelessWidget {
                         ),
                       );
                       if (confirm == true && context.mounted) {
-                        await eventProvider.deleteEvent(eventId);
+                        await eventProvider.deleteEvent(widget.eventId);
                         Navigator.pop(context);
                       }
                     }
@@ -170,7 +187,7 @@ class EventDetailScreen extends StatelessWidget {
                       icon: Icons.people,
                       title: 'View Attendees',
                       subtitle: '$registrationCount registered',
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AttendeesScreen(eventId: eventId))),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AttendeesScreen(eventId: widget.eventId))),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -178,7 +195,7 @@ class EventDetailScreen extends StatelessWidget {
                     icon: Icons.calendar_month,
                     title: 'View Schedule',
                     subtitle: '$sessionCount sessions',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ScheduleScreen(eventId: eventId, canEdit: canManage))),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ScheduleScreen(eventId: widget.eventId, canEdit: canManage))),
                   ),
                   const SizedBox(height: 100),
                 ],
@@ -210,7 +227,7 @@ class EventDetailScreen extends StatelessWidget {
                     CustomButton(
                       text: hasTicket ? 'View Ticket' : 'Get Ticket',
                       useGradient: true,
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TicketSelectionScreen(eventId: eventId))),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TicketSelectionScreen(eventId: widget.eventId))),
                     ),
                   ],
                 ),
